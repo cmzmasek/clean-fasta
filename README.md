@@ -1,0 +1,120 @@
+# clean-fasta
+
+[![CI](https://github.com/cmzmasek/clean-fasta/actions/workflows/ci.yml/badge.svg)](https://github.com/cmzmasek/clean-fasta/actions/workflows/ci.yml)
+[![Python](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://www.python.org/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+
+A small, dependency-free command-line tool (and Python library) for **cleaning
+and filtering FASTA sequence files**. It strips gaps and whitespace, drops
+sequences that are too short, too long, malformed, or below a valid-character
+threshold, optionally removes duplicate identifiers, and writes tidy,
+line-wrapped FASTA output — along with a summary report of what happened.
+
+## What it does
+
+For every sequence in the input, `clean-fasta`:
+
+1. Removes gap characters (`-`) and all whitespace from the sequence body.
+2. Collapses runs of whitespace in the identifier line.
+3. Drops the sequence if it:
+   - has an **empty identifier**;
+   - **contains digits** (unless `--allow-digits`);
+   - is **shorter** than `--min-length` (default `20`);
+   - is **longer** than `--max-length` (if set);
+   - has a **valid-character ratio** below `--min-ratio` (default `0.99`);
+   - has a **duplicate identifier** (unless `--no-unique`).
+4. Writes the surviving sequences, wrapped at `--wrap` characters (default `80`).
+
+The **valid-character ratio** is:
+- for `--type aa`: the fraction of characters that are *not* `_ - ? X x * .`;
+- for `--type na`: the fraction of characters that are `A`, `C`, `G`, or `T`.
+
+## Installation
+
+Requires Python 3.9+.
+
+```bash
+# from a clone of this repository
+pip install .
+
+# or, for development (editable install + test/lint tools)
+pip install -e ".[dev]"
+```
+
+This installs a `clean-fasta` command on your PATH.
+
+## Usage
+
+```
+clean-fasta [OPTIONS] INPUT OUTPUT
+```
+
+Use `-` for `INPUT` or `OUTPUT` to read from stdin / write to stdout.
+
+### Options
+
+| Option | Default | Description |
+| --- | --- | --- |
+| `-t`, `--type {aa,na}` | `aa` | Sequence type: amino acid or nucleic acid. |
+| `-m`, `--min-length N` | `20` | Minimum sequence length. |
+| `-M`, `--max-length N` | none | Maximum sequence length. |
+| `-r`, `--min-ratio R` | `0.99` | Minimum ratio of valid characters (0.0–1.0). |
+| `-u`, `--unique` / `--no-unique` | `--unique` | Drop / keep sequences with duplicate ids. |
+| `--allow-digits` | off | Keep sequences that contain digit characters. |
+| `-w`, `--wrap N` | `80` | Wrap output lines at N chars (`0` = no wrapping). |
+| `-f`, `--force` | off | Overwrite the output file if it exists. |
+| `-q`, `--quiet` | off | Suppress the summary report. |
+| `--version` | | Print the version and exit. |
+
+The summary report is written to **stderr**, so piping via stdout stays clean.
+
+### Examples
+
+```bash
+# Clean a protein FASTA, keeping sequences >= 50 residues
+clean-fasta proteins.fasta proteins.clean.fasta -m 50
+
+# Nucleotide sequences, allow up to 2% ambiguous bases, cap length at 5000
+clean-fasta genes.fasta genes.clean.fasta -t na -r 0.98 -M 5000
+
+# Use in a pipeline (read stdin, write stdout, no report)
+gunzip -c raw.fasta.gz | clean-fasta - - -q > clean.fasta
+
+# Overwrite an existing output file
+clean-fasta in.fasta out.fasta --force
+```
+
+## Use as a library
+
+The filtering logic is I/O-free and importable:
+
+```python
+from clean_fasta import stream_fasta, filter_sequences, CleanStats
+
+stats = CleanStats()
+with open("in.fasta") as handle:
+    for seq in filter_sequences(stream_fasta(handle), min_length=50, stats=stats):
+        print(seq.to_fasta_wrapped(80))
+
+print("passed:", stats.passed, "of", stats.total)
+```
+
+Or clean a file in one call:
+
+```python
+from clean_fasta import clean_fasta_file
+
+stats = clean_fasta_file("in.fasta", "out.fasta", min_length=50, is_aa=True, force=True)
+```
+
+## Development
+
+```bash
+pip install -e ".[dev]"
+pytest          # run the test suite
+ruff check .    # lint
+```
+
+## License
+
+[MIT](LICENSE) © Christian M. Zmasek
