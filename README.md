@@ -115,6 +115,23 @@ pytest          # run the test suite
 ruff check .    # lint
 ```
 
+### Releasing (maintainers)
+
+Releases are published to PyPI automatically by
+[`.github/workflows/release.yml`](.github/workflows/release.yml) using PyPI
+[trusted publishing](https://docs.pypi.org/trusted-publishers/) — no API tokens
+are stored anywhere.
+
+To cut a release:
+
+1. Bump `__version__` in `src/clean_fasta/__init__.py` and update `CHANGELOG.md`.
+2. Commit and push to `main`.
+3. Create a GitHub Release whose tag is `v<version>` (e.g. `v2.0.1`).
+
+Publishing the release triggers the workflow, which builds the sdist and wheel
+and uploads them to PyPI. The workflow fails fast if the release tag does not
+match the packaged version, so a forgotten version bump can't ship.
+
 ## License
 
 [MIT](LICENSE) © Christian M. Zmasek
