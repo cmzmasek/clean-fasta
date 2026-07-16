@@ -35,14 +35,25 @@ The **valid-character ratio** is:
 Requires Python 3.9+.
 
 ```bash
-# from a clone of this repository
+pip install clean-fasta
+```
+
+This installs a `clean-fasta` command on your PATH. Verify it with:
+
+```bash
+clean-fasta --version
+```
+
+To install the latest development version from source instead:
+
+```bash
+git clone https://github.com/cmzmasek/clean-fasta
+cd clean-fasta
 pip install .
 
 # or, for development (editable install + test/lint tools)
 pip install -e ".[dev]"
 ```
-
-This installs a `clean-fasta` command on your PATH.
 
 ## Usage
 
