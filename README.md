@@ -9,7 +9,10 @@ A small, dependency-free command-line tool (and Python library) for **cleaning
 and filtering FASTA sequence files**. It strips gaps and whitespace, drops
 sequences that are too short, too long, malformed, or below a valid-character
 threshold, optionally removes duplicate identifiers, and writes tidy,
-line-wrapped FASTA output — along with a summary report of what happened.
+line-wrapped FASTA output — along with a **before/after statistics report** of
+what happened (length distribution, N50/L50, GC content, extremes, and more).
+It can also profile a file without cleaning it (`--stats-only`) or preview a run
+without writing anything (`--dry-run`).
 
 ## What it does
 
@@ -58,10 +61,11 @@ pip install -e ".[dev]"
 ## Usage
 
 ```
-clean-fasta [OPTIONS] INPUT OUTPUT
+clean-fasta [OPTIONS] INPUT [OUTPUT]
 ```
 
-Use `-` for `INPUT` or `OUTPUT` to read from stdin / write to stdout.
+Use `-` for `INPUT` or `OUTPUT` to read from stdin / write to stdout. `OUTPUT`
+is required for a normal run, but not with `--dry-run` or `--stats-only`.
 
 ### Options
 
@@ -76,9 +80,29 @@ Use `-` for `INPUT` or `OUTPUT` to read from stdin / write to stdout.
 | `-w`, `--wrap N` | `80` | Wrap output lines at N chars (`0` = no wrapping). |
 | `-f`, `--force` | off | Overwrite the output file if it exists. |
 | `-q`, `--quiet` | off | Suppress the summary report. |
+| `-n`, `--dry-run` | off | Analyze and report, but write no output. |
+| `--stats-only` | off | Print statistics for `INPUT` only; write nothing (no `OUTPUT` needed). |
 | `--version` | | Print the version and exit. |
 
 The summary report is written to **stderr**, so piping via stdout stays clean.
+
+### Statistics report
+
+Every run (unless `--quiet`) prints a **before/after** report: descriptive
+statistics over the input set next to the same statistics over the kept
+(surviving) set. This includes sequence count, total residues, the length
+distribution (min / Q1 / median / Q3 / max / mean / stddev), **N50** and
+**L50**, **GC content** (nucleic-acid input only), the overall valid-character
+ratio, and the named longest / shortest / most- and least-"bad"-character
+sequences.
+
+```bash
+# Profile a file without cleaning it (no OUTPUT argument needed)
+clean-fasta genes.fasta --stats-only -t na
+
+# Preview what a cleaning run would do, writing nothing
+clean-fasta genes.fasta genes.clean.fasta --dry-run -t na -m 200
+```
 
 ### Examples
 

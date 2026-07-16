@@ -36,6 +36,9 @@ _IRREGULAR_AA_CHARS = ("_", "-", "?", "X", "x", "*", ".")
 #: Regular (unambiguous) nucleotide characters, both cases.
 _REGULAR_NA_CHARS = ("a", "A", "c", "C", "g", "G", "t", "T")
 
+#: G and C nucleotides, both cases, for GC-content calculation.
+_GC_CHARS = ("c", "C", "g", "G")
+
 
 class MolSeq:
     """A molecular sequence with an identifier.
@@ -82,6 +85,10 @@ class MolSeq:
     def count_irregular_chars_aa(self) -> int:
         """Count gap / unknown / stop characters (``_ - ? X x * .``)."""
         return sum(self._seq.count(ch) for ch in _IRREGULAR_AA_CHARS)
+
+    def count_gc(self) -> int:
+        """Count G and C nucleotides (both cases), for GC-content calculation."""
+        return sum(self._seq.count(ch) for ch in _GC_CHARS)
 
     def __str__(self) -> str:
         return self.to_fasta_wrapped(60)

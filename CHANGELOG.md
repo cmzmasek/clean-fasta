@@ -5,6 +5,28 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.0] - 2026-07-16
+
+### Added
+- A richer **before/after statistics report**. The summary now shows, for both
+  the input set and the kept (surviving) set: sequence count, total residues,
+  minimum / Q1 / median / Q3 / maximum / mean / standard-deviation of length,
+  **N50** and **L50**, **GC content** (nucleic-acid input only), and the overall
+  valid-character ratio.
+- **Extremes** blocks naming the longest, shortest, most-"bad"-character, and
+  least-"bad"-character sequences (with their values) for both sets.
+- `-n` / `--dry-run`: run the full pipeline and print the report, but write no
+  output (and never touch/overwrite the output file).
+- `--stats-only`: profile the input and print statistics only; no output is
+  written and the `OUTPUT` argument is not required.
+- `MolSeq.count_gc()` and a public `SeqSummary` class holding the per-set
+  descriptive statistics.
+
+### Changed
+- The `OUTPUT` argument is now optional; it is required only for a normal
+  cleaning run (not with `--dry-run` / `--stats-only`).
+- The summary report was redesigned into aligned Input/Kept columns.
+
 ## [2.0.0] - 2026-07-08
 
 First release of `clean-fasta` as its own installable package. This version

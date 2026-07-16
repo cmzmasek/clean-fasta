@@ -31,7 +31,8 @@ def test_main_reports_to_stderr_not_stdout(tmp_path, capsys):
     captured = capsys.readouterr()
     assert captured.out == ""
     assert "clean-fasta" in captured.err
-    assert "Passed" in captured.err
+    assert "Statistics (before / after filtering)" in captured.err
+    assert "passed" in captured.err
 
 
 def test_main_quiet_suppresses_report(tmp_path, capsys):
@@ -120,3 +121,63 @@ def test_version(capsys):
         main(["--version"])
     assert exc.value.code == 0
     assert __version__ in capsys.readouterr().out
+
+
+# --------------------------------------------------------------------------- #
+# --dry-run / --stats-only
+# --------------------------------------------------------------------------- #
+
+def test_dry_run_writes_nothing_but_reports(tmp_path, capsys):
+    infile = write_fasta(tmp_path, ">a\nACGTACGTACGT\n")
+    outfile = tmp_path / "out.fasta"
+
+    code = main([str(infile), str(outfile), "-m", "1", "--dry-run"])
+
+    captured = capsys.readouterr()
+    assert code == 0
+    assert not outfile.exists()
+    assert "Dry run" in captured.err
+    assert "Statistics (before / after filtering)" in captured.err
+
+
+def test_dry_run_does_not_clobber_existing_output(tmp_path, capsys):
+    infile = write_fasta(tmp_path, ">a\nACGTACGTACGT\n")
+    outfile = tmp_path / "out.fasta"
+    outfile.write_text("precious")
+
+    code = main([str(infile), str(outfile), "-m", "1", "--dry-run"])
+    assert code == 0
+    assert outfile.read_text() == "precious"
+
+
+def test_stats_only_needs_no_output(tmp_path, capsys):
+    infile = write_fasta(tmp_path, ">a\nACGTACGTACGT\n>short\nAC\n")
+
+    code = main([str(infile), "--stats-only", "-m", "5"])
+
+    captured = capsys.readouterr()
+    assert code == 0
+    assert captured.out == ""
+    assert "Statistics only" in captured.err
+    assert "Extremes (input)" in captured.err
+
+
+def test_output_required_for_normal_run(tmp_path):
+    infile = write_fasta(tmp_path, ">a\nACGTACGT\n")
+    with pytest.raises(SystemExit) as exc:
+        main([str(infile)])
+    assert exc.value.code == 2
+
+
+def test_stats_only_conflicts_with_quiet(tmp_path):
+    infile = write_fasta(tmp_path, ">a\nACGTACGT\n")
+    with pytest.raises(SystemExit) as exc:
+        main([str(infile), "--stats-only", "-q"])
+    assert exc.value.code == 2
+
+
+def test_dry_run_and_stats_only_are_mutually_exclusive(tmp_path):
+    infile = write_fasta(tmp_path, ">a\nACGTACGT\n")
+    with pytest.raises(SystemExit) as exc:
+        main([str(infile), "--dry-run", "--stats-only"])
+    assert exc.value.code == 2

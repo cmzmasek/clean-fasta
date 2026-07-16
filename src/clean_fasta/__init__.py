@@ -13,10 +13,11 @@ Public API::
 
 from __future__ import annotations
 
-__version__ = "2.0.0"
+__version__ = "2.1.0"
 
 from clean_fasta.cleaner import (
     CleanStats,
+    SeqSummary,
     clean_fasta_file,
     filter_sequences,
     format_stats,
@@ -27,6 +28,7 @@ from clean_fasta.molseq import MolSeq
 __all__ = [
     "MolSeq",
     "CleanStats",
+    "SeqSummary",
     "stream_fasta",
     "filter_sequences",
     "clean_fasta_file",

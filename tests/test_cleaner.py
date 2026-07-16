@@ -6,6 +6,7 @@ import pytest
 
 from clean_fasta.cleaner import (
     CleanStats,
+    SeqSummary,
     clean_fasta_file,
     filter_sequences,
     format_stats,
@@ -180,6 +181,97 @@ def test_filter_collapses_whitespace_in_output_id():
 
 
 # --------------------------------------------------------------------------- #
+# SeqSummary
+# --------------------------------------------------------------------------- #
+
+def _summary(lengths, is_aa=True):
+    s = SeqSummary(is_aa=is_aa)
+    for i, length in enumerate(lengths):
+        s.add(f"seq{i}", length, bad=0, gc=0)
+    return s
+
+
+def test_summary_empty_metrics_are_none():
+    s = SeqSummary()
+    assert s.count == 0
+    assert s.median_length is None
+    assert s.mean_length is None
+    assert s.length_stddev is None
+    assert s.n50 is None
+    assert s.l50 is None
+    assert s.quartiles == (None, None)
+    assert s.valid_ratio is None
+
+
+def test_summary_basic_length_metrics():
+    s = _summary([2, 3, 4, 5, 6])
+    assert s.count == 5
+    assert s.total_residues == 20
+    assert s.shortest_len == 2
+    assert s.longest_len == 6
+    assert s.mean_length == pytest.approx(4.0)
+    assert s.median_length == pytest.approx(4.0)
+    assert s.length_stddev == pytest.approx(2**0.5)
+    assert s.quartiles == (pytest.approx(3.0), pytest.approx(5.0))
+
+
+def test_summary_n50_l50():
+    # lengths 6,5,4,3,2 (total 20, half 10): cumulative reaches 10 at the 2nd seq.
+    s = _summary([2, 3, 4, 5, 6])
+    assert s.n50 == 5
+    assert s.l50 == 2
+
+
+def test_summary_gc_content_only_for_na():
+    na = SeqSummary(is_aa=False)
+    na.add("x", length=10, bad=0, gc=5)
+    assert na.gc_content == pytest.approx(0.5)
+
+    aa = SeqSummary(is_aa=True)
+    aa.add("x", length=10, bad=0, gc=5)
+    assert aa.gc_content is None
+
+
+def test_summary_valid_ratio_and_bad_extremes():
+    s = SeqSummary()
+    s.add("clean", length=10, bad=0, gc=0)
+    s.add("dirty", length=10, bad=4, gc=0)
+    assert s.valid_ratio == pytest.approx((20 - 4) / 20)
+    assert (s.most_bad_name, s.most_bad_count) == ("dirty", 4)
+    assert (s.least_bad_name, s.least_bad_count) == ("clean", 0)
+
+
+def test_filter_populates_input_and_kept_summaries():
+    stats = CleanStats()
+    seqs = [MolSeq("keep", "ACGT" * 10), MolSeq("drop", "AC")]  # 40 and 2
+    list(filter_sequences(seqs, min_length=10, stats=stats))
+
+    assert stats.input_summary.count == 2
+    assert stats.input_summary.shortest_len == 2
+    assert stats.input_summary.longest_len == 40
+    # Only the 40-mer survives, so the kept summary sees just that one.
+    assert stats.kept_summary.count == 1
+    assert stats.kept_summary.shortest_len == 40
+    assert stats.kept_summary.longest_len == 40
+
+
+def test_filter_summary_bad_chars_track_type():
+    # NA: 'NN' are the two bad chars in a 10-mer -> most bad = 2.
+    stats = CleanStats()
+    list(
+        filter_sequences(
+            [MolSeq("a", "ACGTACGTNN")],
+            min_length=1,
+            is_aa=False,
+            min_ratio=0.0,
+            stats=stats,
+        )
+    )
+    assert stats.input_summary.most_bad_count == 2
+    assert stats.input_summary.is_aa is False
+
+
+# --------------------------------------------------------------------------- #
 # clean_fasta_file
 # --------------------------------------------------------------------------- #
 
@@ -234,18 +326,62 @@ def test_clean_fasta_file_stdout(tmp_path, capsys):
     assert capsys.readouterr().out == ">a\nACGTACGT\n"
 
 
+def test_clean_fasta_file_write_output_false_gathers_stats_without_writing(tmp_path):
+    infile = tmp_path / "in.fasta"
+    outfile = tmp_path / "out.fasta"
+    infile.write_text(">a\nACGTACGT\n>short\nAC\n")
+
+    stats = clean_fasta_file(str(infile), str(outfile), min_length=5, write_output=False)
+
+    assert stats.total == 2
+    assert stats.passed == 1
+    assert not outfile.exists()  # nothing written
+
+
+def test_clean_fasta_file_write_output_false_ignores_existing_output(tmp_path):
+    infile = tmp_path / "in.fasta"
+    outfile = tmp_path / "out.fasta"
+    infile.write_text(">a\nACGTACGT\n")
+    outfile.write_text("keep me")
+
+    # No FileExistsError, and the existing file is left untouched.
+    clean_fasta_file(str(infile), str(outfile), min_length=1, write_output=False)
+    assert outfile.read_text() == "keep me"
+
+
 # --------------------------------------------------------------------------- #
 # format_stats
 # --------------------------------------------------------------------------- #
 
 def test_format_stats_handles_empty_run():
     report = format_stats(CleanStats())
-    lines = report.splitlines()
-    assert any(line.startswith("Input sequences") and line.endswith(": 0") for line in lines)
-    assert "mean length" in report
-    assert "n/a" in report  # min/max length and ratios are n/a
+    assert "sequences" in report
+    assert "length median" in report
+    assert "N50" in report
+    assert "(none)" in report  # extremes have no records to report
+    assert "n/a" in report  # numeric metrics are n/a with no input
 
 
 def test_format_stats_reports_passed():
     stats = CleanStats(total=3, passed=2)
-    assert "Passed" in format_stats(stats)
+    report = format_stats(stats)
+    assert "Filtering" in report
+    assert "passed" in report
+
+
+def test_format_stats_has_two_columns_and_extremes():
+    stats = CleanStats()
+    list(
+        filter_sequences(
+            [MolSeq("long", "ACGT" * 25), MolSeq("shorty", "ACGTAC")],
+            min_length=10,
+            stats=stats,
+        )
+    )
+    report = format_stats(stats)
+    assert "Input" in report and "Kept" in report
+    assert "Extremes (input)" in report
+    assert "Extremes (kept)" in report
+    # 'long' is the longest input and the only survivor; 'shorty' the shortest input.
+    assert "long (100)" in report
+    assert "shorty (6)" in report

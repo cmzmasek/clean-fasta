@@ -40,6 +40,12 @@ def test_count_irregular_chars_aa():
     assert MolSeq("x", "MK_-?Xx*.").count_irregular_chars_aa() == 7
 
 
+def test_count_gc_is_case_insensitive():
+    # C c G g -> 4 GC bases; A, T, N do not count.
+    assert MolSeq("x", "ACGTacgtNn").count_gc() == 4
+    assert MolSeq("x", "AATT").count_gc() == 0
+
+
 def test_equality_and_repr():
     assert MolSeq("id", "ACGT") == MolSeq("id", "ACGT")
     assert MolSeq("id", "ACGT") != MolSeq("id", "ACGA")

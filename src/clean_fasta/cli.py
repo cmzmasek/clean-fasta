@@ -52,7 +52,11 @@ def build_parser() -> argparse.ArgumentParser:
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument("input", help="input FASTA file (or '-' for stdin)")
-    parser.add_argument("output", help="output FASTA file (or '-' for stdout)")
+    parser.add_argument(
+        "output", nargs="?", default=None,
+        help="output FASTA file (or '-' for stdout); "
+        "not required with --dry-run or --stats-only",
+    )
 
     parser.add_argument(
         "-t", "--type", choices=("aa", "na"), default="aa",
@@ -90,17 +94,29 @@ def build_parser() -> argparse.ArgumentParser:
         "-q", "--quiet", action="store_true",
         help="do not print the summary report to stderr",
     )
+
+    mode_group = parser.add_mutually_exclusive_group()
+    mode_group.add_argument(
+        "-n", "--dry-run", action="store_true",
+        help="analyze and report, but do not write any output",
+    )
+    mode_group.add_argument(
+        "--stats-only", action="store_true",
+        help="print statistics for INPUT only; write no output (OUTPUT not needed)",
+    )
+
     parser.add_argument(
         "--version", action="version", version=f"%(prog)s {__version__}",
     )
     return parser
 
 
-def _format_header(args: argparse.Namespace) -> str:
+def _format_header(args: argparse.Namespace, mode: str) -> str:
     max_length = "no limit" if args.max_length is None else str(args.max_length)
     return "\n".join(
         (
             f"clean-fasta {__version__}",
+            f"  mode            : {mode}",
             f"  type            : {'amino acid' if args.type == 'aa' else 'nucleic acid'}",
             f"  min length      : {args.min_length}",
             f"  max length      : {max_length}",
@@ -109,6 +125,25 @@ def _format_header(args: argparse.Namespace) -> str:
             f"  allow digits    : {'yes' if args.allow_digits else 'no'}",
         )
     )
+
+
+def _status_line(args: argparse.Namespace, stats: CleanStats) -> str | None:
+    """The trailing one-line summary of what was (or would have been) written."""
+    if args.dry_run:
+        if args.output not in (None, "-"):
+            return (
+                f"Dry run: {stats.passed} sequences would be written to "
+                f"{args.output} (nothing written)."
+            )
+        return f"Dry run: {stats.passed} of {stats.total} sequences would pass (nothing written)."
+    if args.stats_only:
+        return (
+            f"Statistics only: {stats.passed} of {stats.total} sequences "
+            "pass the filters (nothing written)."
+        )
+    if args.output != "-":
+        return f"Wrote {stats.passed} sequences to {args.output}"
+    return None
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -123,10 +158,26 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.max_length is not None and args.max_length <= args.min_length:
         parser.error("--max-length must be greater than --min-length")
 
+    writing = not (args.dry_run or args.stats_only)
+    if writing and args.output is None:
+        parser.error(
+            "the output argument is required "
+            "(use '-' for stdout, or --dry-run / --stats-only to analyze without writing)"
+        )
+    if args.stats_only and args.quiet:
+        parser.error("--quiet cannot be combined with --stats-only (there would be no output)")
+
+    if args.dry_run:
+        mode = "dry run (no output written)"
+    elif args.stats_only:
+        mode = "statistics only (no output written)"
+    else:
+        mode = "clean"
+
     try:
         stats: CleanStats = clean_fasta_file(
             args.input,
-            args.output,
+            args.output if args.output is not None else "-",
             min_length=args.min_length,
             max_length=args.max_length,
             min_ratio=args.min_ratio,
@@ -135,6 +186,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             allow_digits=args.allow_digits,
             wrap=args.wrap,
             force=args.force,
+            write_output=writing,
         )
     except FileExistsError as exc:
         print(f"clean-fasta: error: {exc}", file=sys.stderr)
@@ -147,10 +199,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 1
 
     if not args.quiet:
-        print(_format_header(args), file=sys.stderr)
+        print(_format_header(args, mode), file=sys.stderr)
         print(format_stats(stats), file=sys.stderr)
-        if args.output != "-":
-            print(f"Wrote {stats.passed} sequences to {args.output}", file=sys.stderr)
+        status = _status_line(args, stats)
+        if status is not None:
+            print(status, file=sys.stderr)
 
     return 0
 
